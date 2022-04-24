@@ -31,7 +31,7 @@ def send_message(bot, message):
     try:
         bot.send_message(TELEGRAM_CHAT_ID, message)
         logging.info(f'Бот отправил сообщение "{message}"')
-    except Exception as error:
+    except telegram.error as error:
         logging.error('Сбой при отправке сообщения.', error)
 
 
@@ -39,14 +39,26 @@ def get_api_answer(current_timestamp):
     """Отправляем get запрос по API, приводим к типам данных Python."""
     timestamp = current_timestamp or int(time.time())
     params = {'from_date': timestamp}
-    response = requests.get(ENDPOINT, headers=HEADERS, params=params)
-    if response.status_code != 200:
-        logging.error(
-            f'Сбой в работе программы: Эндпоинт {ENDPOINT} недоступен.'
-            f'Код ответа API: {response.status_code}')
-        # Без SystemExit не проходил тесты
-        raise SystemExit('Server response status code != 200')
-    return response.json()
+    try:
+        response = requests.get(ENDPOINT, headers=HEADERS, params=params)
+        if response.status_code != 200:
+            logging.error(
+                f'Сбой в работе программы: Эндпоинт {ENDPOINT} недоступен.'
+                f'Код ответа API: {response.status_code}')
+            # Без SystemExit не проходил тесты
+            raise SystemExit('Server response status code != 200')
+        return response.json()
+    # Выделил основные виды исключений, которыe прокрывают, пожалуй 90%
+    # всех проблем.
+    except requests.exceptions.Timeout as error:
+        logging.error('Время ожидания запроса истекло.', error)
+    except requests.exceptions.ConnectionError as error:
+        logging.error('Произошла ошибка подключения.', error)
+    except requests.exceptions.HTTPError as error:
+        logging.error('Произошла ошибка HTTP.', error)
+    # Отловим общию ошибку на всякий случай
+    except requests.exceptions as error:
+        logging.error('Ошибка', error)
 
 
 def check_response(response):
@@ -55,12 +67,20 @@ def check_response(response):
     """
     # Если не поставить точку в первой строке docstring'a flake8
     # не пропускает D400, пришлось поставить (55,72 строка)
-    homeworks = response['homeworks']
-    if type(homeworks) != list:
-        logging.error('Ответ от API пришел не в виде списка.')
-        # Без SystemExit не проходил тесты
-        raise SystemExit('Программа принудительно остановлена.')
-    return homeworks
+    if isinstance(response, dict):
+        try:
+            homeworks = response.get('homeworks')
+        except KeyError:
+            logging.error('Ошибка словаря по ключу homeworks.')
+            raise KeyError('Ошибка словаря по ключу homeworks.')
+        if homeworks is None:
+            logging.error('Значение по ключу homeworks пустое.')
+        if not isinstance(homeworks, list):
+            logging.error('Ответ от API пришел не в виде списка.')
+            raise AttributeError('Ответ от API пришел не в виде списка.')
+        return homeworks
+    else:
+        raise TypeError('Ответ API не в виде словаря.')
 
 
 def parse_status(homework):
@@ -72,11 +92,15 @@ def parse_status(homework):
     # Ответ в виде: <github_nickname>__hw05_final.zip не очень, как по мне
     # я делал по ключу lesson_name и ответ был более красив:
     # Проект спринта: подписки на авторов. Но тесты не пускают :(
-    homework_name = homework['homework_name']     # lesson_name
-    homework_status = homework['status']
+    homework_name = homework.get('homework_name')     # lesson_name
+    homework_status = homework.get('status')
+    if homework_name is None:
+        logging.error('Нету ключа со значением homework_name.')
+    if homework_status is None:
+        logging.error('Нету ключа со значением status.')
     if homework_name in UPDATE_STATUS:
         if UPDATE_STATUS[homework_name] == homework_status:
-            logging.debug('Отсутствие в ответе новых статусов.')
+            logging.info('Отсутствие в ответе новых статусов.')
             return 0
     else:
         UPDATE_STATUS[homework_name] = homework_status
@@ -115,10 +139,10 @@ def main():
         try:
             response = get_api_answer(current_timestamp)
             homeworks = check_response(response)
-            for homework in homeworks:
-                message = parse_status(homework)
-                if message != 0:
-                    send_message(bot, message)
+            # Возьмем последнюю работу (свежую)
+            message = parse_status(homeworks[0])
+            if message != 0:
+                send_message(bot, message)
 
             current_timestamp = int(time.time())
             time.sleep(RETRY_TIME)
