@@ -139,10 +139,12 @@ def main():
         try:
             response = get_api_answer(current_timestamp)
             homeworks = check_response(response)
-            # Возьмем последнюю работу (свежую)
-            message = parse_status(homeworks[0])
-            if message != 0:
-                send_message(bot, message)
+            # Проверим что список не пустой
+            if len(homeworks) != 0:
+                # Возьмем последнюю работу (свежую)
+                message = parse_status(homeworks[0])
+                if message != 0:
+                    send_message(bot, message)
 
             current_timestamp = int(time.time())
             time.sleep(RETRY_TIME)
