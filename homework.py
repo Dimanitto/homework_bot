@@ -31,7 +31,9 @@ def send_message(bot, message):
     try:
         bot.send_message(TELEGRAM_CHAT_ID, message)
         logging.info(f'Бот отправил сообщение "{message}"')
-    except telegram.error as error:
+    # Взял базовый класс TelegramError
+    # в нем есть несколько модулей для ошибок с message
+    except telegram.error.TelegramError as error:
         logging.error('Сбой при отправке сообщения.', error)
 
 
@@ -68,9 +70,8 @@ def check_response(response):
     # Если не поставить точку в первой строке docstring'a flake8
     # не пропускает D400, пришлось поставить (55,72 строка)
     if isinstance(response, dict):
-        try:
-            homeworks = response.get('homeworks')
-        except KeyError:
+        homeworks = response.get('homeworks')
+        if homeworks is None:
             logging.error('Ошибка словаря по ключу homeworks.')
             raise KeyError('Ошибка словаря по ключу homeworks.')
         if homeworks is None:
