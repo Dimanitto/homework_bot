@@ -15,6 +15,13 @@ source venv/scripts/activate
 ```
 pip install -r requirements.txt
 ``` 
+Создаем .env файл с токенами:
+
+```
+PRACTICUM_TOKEN=<PRACTICUM_TOKEN>
+TELEGRAM_TOKEN=<TELEGRAM_TOKEN>
+TELEGRAM_CHAT_ID =<CHAT_ID>
+```
 - Запустить проект
 ```
 python homework.py
